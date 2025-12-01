@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles, Clock, Users, ChefHat, Heart, ArrowRight, Loader2, RefreshCw } from "lucide-react";
+import { Sparkles, Clock, Users, ChefHat, Heart, ArrowRight, Loader2, RefreshCw, Settings, Package, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -19,6 +19,8 @@ import {
   SelectValue,
 } from "./ui/select";
 import { useMealPlanStore, Meal } from "@/stores/mealPlanStore";
+import { usePreferencesStore } from "@/stores/preferencesStore";
+import { usePantryStore } from "@/stores/pantryStore";
 import { useGenerateMeals } from "@/hooks/useAI";
 
 interface MealCardProps {
@@ -181,13 +183,21 @@ const defaultMeals: Meal[] = [
 
 const MenuSuggestions = () => {
   const { recommendations, favorites, toggleFavorite, selectMeal, isLoading } = useMealPlanStore();
+  const { dietaryPreferences, quickSettings, nutritionGoals } = usePreferencesStore();
+  const { pantryItems } = usePantryStore();
   const { generateMeals, isLoading: isGenerating } = useGenerateMeals();
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [mealTypeDialog, setMealTypeDialog] = useState(false);
   const [selectedMealType, setSelectedMealType] = useState<"breakfast" | "lunch" | "dinner" | "snacks">("lunch");
 
-  const mealsToShow = recommendations.length > 0 ? recommendations : defaultMeals;
+  const activePreferences = dietaryPreferences.filter(p => p.active);
+  const activeQuickSettings = quickSettings.filter(s => s.active);
+  const hasPreferences = activePreferences.length > 0 || activeQuickSettings.length > 0;
+  const hasPantryItems = pantryItems.length > 0;
+  const hasRecommendations = recommendations.length > 0;
+
+  const mealsToShow = hasRecommendations ? recommendations : defaultMeals;
 
   const handleToggleFavorite = (meal: Meal) => {
     toggleFavorite(meal.id);
@@ -235,14 +245,14 @@ const MenuSuggestions = () => {
   return (
     <section id="menu-suggestions" className="py-12 bg-secondary/30">
       <div className="container">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
           <div>
             <div className="flex items-center gap-2 mb-2">
               <ChefHat className="h-5 w-5 text-primary" />
               <span className="text-sm font-medium text-primary">AI Recommendations</span>
             </div>
             <h2 className="text-3xl font-bold text-foreground">Personalized for You</h2>
-            <p className="text-muted-foreground mt-1">Based on your pantry and nutritional goals</p>
+            <p className="text-muted-foreground mt-1">Based on your preferences and pantry items</p>
           </div>
           <Button 
             variant="hero" 
@@ -263,6 +273,62 @@ const MenuSuggestions = () => {
           </Button>
         </div>
 
+        {/* Current Configuration Summary */}
+        <div className="grid md:grid-cols-2 gap-4 mb-8">
+          <Card className="p-4 border-dashed">
+            <div className="flex items-center gap-2 mb-3">
+              <Settings className="h-4 w-4 text-primary" />
+              <span className="font-medium text-foreground">Your Preferences</span>
+            </div>
+            {hasPreferences ? (
+              <div className="flex flex-wrap gap-2">
+                {activePreferences.map(p => (
+                  <Badge key={p.label} variant="secondary" className="text-xs">
+                    {p.label}
+                  </Badge>
+                ))}
+                {activeQuickSettings.map(s => (
+                  <Badge key={s.id} variant="outline" className="text-xs">
+                    {s.label}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                Set your preferences above to personalize meals
+              </p>
+            )}
+          </Card>
+          
+          <Card className="p-4 border-dashed">
+            <div className="flex items-center gap-2 mb-3">
+              <Package className="h-4 w-4 text-primary" />
+              <span className="font-medium text-foreground">Your Pantry ({pantryItems.length} items)</span>
+            </div>
+            {hasPantryItems ? (
+              <div className="flex flex-wrap gap-2">
+                {pantryItems.slice(0, 6).map(item => (
+                  <Badge key={item.id} variant="secondary" className="text-xs">
+                    {item.name}
+                  </Badge>
+                ))}
+                {pantryItems.length > 6 && (
+                  <Badge variant="outline" className="text-xs">
+                    +{pantryItems.length - 6} more
+                  </Badge>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                Add items to your pantry to get better recommendations
+              </p>
+            )}
+          </Card>
+        </div>
+
+        {/* Meal Cards */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {mealsToShow.map((meal, index) => (
             <MealCard 
@@ -275,6 +341,15 @@ const MenuSuggestions = () => {
             />
           ))}
         </div>
+
+        {!hasRecommendations && (
+          <div className="mt-6 text-center p-6 rounded-xl border border-dashed border-border">
+            <Sparkles className="h-8 w-8 text-primary mx-auto mb-3" />
+            <p className="text-muted-foreground">
+              Click <span className="font-semibold text-foreground">"Generate Meals"</span> to get AI-powered recommendations based on your preferences and pantry
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Recipe Detail Dialog */}
