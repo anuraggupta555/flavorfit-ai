@@ -21,39 +21,37 @@ serve(async (req) => {
     console.log("Generating meals with preferences:", { preferences, quickSettings, nutritionGoals });
     console.log("Pantry items:", pantry);
 
-    const prompt = `You are a nutrition expert and chef. Generate 8 personalized meal recommendations based on the user's preferences and available pantry items.
+    const prompt = `You are a nutrition expert and chef. Generate 8 personalized meal recommendations that PRIMARILY use the user's available pantry items and respect their dietary preferences.
 
-USER PREFERENCES:
-- Dietary Restrictions: ${JSON.stringify(preferences)}
-- Quick Settings: ${JSON.stringify(quickSettings)}
-- Nutrition Goals: Daily Calories: ${nutritionGoals.calories}kcal, Protein: ${nutritionGoals.protein}g, Carbs: ${nutritionGoals.carbs}g, Fats: ${nutritionGoals.fats}g
+USER DIETARY PREFERENCES:
+${preferences.length > 0 ? preferences.map((p: string) => `- ${p}`).join('\n') : '- No specific restrictions'}
 
-AVAILABLE PANTRY ITEMS:
-${pantry.map((item: any) => `- ${item.name}: ${item.quantity} (expires: ${item.expiresIn})`).join('\n')}
+QUICK SETTINGS:
+- Quick meals only (under 30 min): ${quickSettings['quick-meals'] ? 'YES' : 'NO'}
+- Family portions (4+ servings): ${quickSettings['family-portions'] ? 'YES' : 'NO'}
+- Eco-friendly (low carbon footprint): ${quickSettings['eco-friendly'] ? 'YES' : 'NO'}
 
-For each meal, provide:
-1. A creative title
-2. Brief description (2 sentences max)
-3. Estimated calories, protein, carbs, and fats
-4. Cooking time
-5. Servings
-6. Tags (e.g., "High Protein", "Quick", "Vegetarian", "Keto")
-7. Match percentage (how well it fits their preferences, 70-100%)
-8. List of ingredients needed
-9. Which ingredients are already in their pantry
-10. Step-by-step instructions (5-7 steps)
+NUTRITION GOALS:
+- Daily Calories: ${nutritionGoals.calories || 2000}kcal
+- Protein Target: ${nutritionGoals.protein || 100}g
+- Carb Limit: ${nutritionGoals.carbs || 250}g  
+- Fat Target: ${nutritionGoals.fats || 70}g
 
-Prioritize meals that:
-- Use ingredients about to expire
-- Match dietary restrictions
-- Meet nutrition goals
-- Respect cooking time preferences (quick meals under 30 min if enabled)
+AVAILABLE PANTRY ITEMS (USE THESE FIRST!):
+${pantry.length > 0 ? pantry.map((item: any) => `- ${item.name}: ${item.quantity} (expires: ${item.expiresIn})`).join('\n') : '- Pantry is empty'}
 
-Return ONLY valid JSON array with this exact structure:
+CRITICAL INSTRUCTIONS:
+1. PRIORITIZE meals that use pantry items, especially those expiring soon
+2. Each meal MUST list which ingredients are already in pantry vs which need to be purchased
+3. Calculate match score based on: pantry utilization (40%), dietary fit (30%), nutrition alignment (30%)
+4. If quick meals setting is ON, all meals must be under 30 minutes
+5. Provide a "mainProtein" field for image matching (chicken, beef, fish, vegetarian, salad, pasta, rice, soup)
+
+Return ONLY valid JSON array:
 [
   {
     "title": "Meal Name",
-    "description": "Brief description",
+    "description": "Brief 2-sentence description highlighting pantry items used",
     "calories": 450,
     "protein": 35,
     "carbs": 40,
@@ -62,8 +60,10 @@ Return ONLY valid JSON array with this exact structure:
     "servings": 2,
     "tags": ["High Protein", "Quick"],
     "matchScore": 95,
+    "mainProtein": "chicken",
     "ingredients": ["ingredient 1", "ingredient 2"],
     "inPantry": ["ingredient 1"],
+    "missingIngredients": ["ingredient 2"],
     "instructions": ["Step 1", "Step 2", "Step 3"]
   }
 ]`;
@@ -131,11 +131,11 @@ Return ONLY valid JSON array with this exact structure:
       throw new Error("Failed to parse meal recommendations");
     }
 
-    // Add IDs and image placeholders to meals
-    const mealsWithIds = meals.map((meal: any, index: number) => ({
+    // Add IDs and appropriate images based on meal content
+    const mealsWithIds = meals.map((meal: any) => ({
       ...meal,
       id: crypto.randomUUID(),
-      image: getPlaceholderImage(meal.tags, index),
+      image: getMealImage(meal.mainProtein, meal.tags, meal.title),
     }));
 
     console.log("Generated meals:", mealsWithIds.length);
@@ -153,17 +153,80 @@ Return ONLY valid JSON array with this exact structure:
   }
 });
 
-function getPlaceholderImage(tags: string[], index: number): string {
-  const images = [
-    "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=600&q=80",
-    "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&q=80",
-    "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=600&q=80",
-    "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=600&q=80",
+function getMealImage(mainProtein: string, tags: string[], title: string): string {
+  const imageMap: Record<string, string[]> = {
+    chicken: [
+      "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=600&q=80",
+      "https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=600&q=80",
+      "https://images.unsplash.com/photo-1632778149955-e80f8ceca2e8?w=600&q=80",
+    ],
+    beef: [
+      "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&q=80",
+      "https://images.unsplash.com/photo-1588168333986-5078d3ae3976?w=600&q=80",
+    ],
+    fish: [
+      "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&q=80",
+      "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=600&q=80",
+      "https://images.unsplash.com/photo-1485921325833-c519f76c4927?w=600&q=80",
+    ],
+    salmon: [
+      "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&q=80",
+      "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=600&q=80",
+    ],
+    vegetarian: [
+      "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=600&q=80",
+      "https://images.unsplash.com/photo-1540914124281-342587941389?w=600&q=80",
+      "https://images.unsplash.com/photo-1543339308-43e59d6b73a6?w=600&q=80",
+    ],
+    salad: [
+      "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=600&q=80",
+      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&q=80",
+      "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&q=80",
+    ],
+    pasta: [
+      "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=600&q=80",
+      "https://images.unsplash.com/photo-1563379926898-05f4575a45d8?w=600&q=80",
+    ],
+    rice: [
+      "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=600&q=80",
+      "https://images.unsplash.com/photo-1516714435131-44d6b64dc6a2?w=600&q=80",
+    ],
+    soup: [
+      "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=600&q=80",
+      "https://images.unsplash.com/photo-1588566565463-180a5b2090d6?w=600&q=80",
+    ],
+    eggs: [
+      "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=600&q=80",
+      "https://images.unsplash.com/photo-1510693206972-df098062cb71?w=600&q=80",
+    ],
+    breakfast: [
+      "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=600&q=80",
+      "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=600&q=80",
+    ],
+  };
+
+  // Check main protein first
+  const protein = mainProtein?.toLowerCase() || '';
+  if (imageMap[protein]) {
+    const images = imageMap[protein];
+    return images[Math.floor(Math.random() * images.length)];
+  }
+
+  // Check tags for clues
+  const tagStr = tags?.join(' ').toLowerCase() || '';
+  const titleLower = title?.toLowerCase() || '';
+  
+  for (const [key, images] of Object.entries(imageMap)) {
+    if (tagStr.includes(key) || titleLower.includes(key)) {
+      return images[Math.floor(Math.random() * images.length)];
+    }
+  }
+
+  // Default healthy food images
+  const defaults = [
     "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&q=80",
     "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=600&q=80",
     "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=600&q=80",
-    "https://images.unsplash.com/photo-1482049016gy-2176-4dc8?w=600&q=80",
   ];
-  
-  return images[index % images.length];
+  return defaults[Math.floor(Math.random() * defaults.length)];
 }
