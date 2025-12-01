@@ -1,9 +1,31 @@
 import { Sparkles, TrendingUp, Leaf } from "lucide-react";
 import { Button } from "./ui/button";
+import { toast } from "sonner";
 
 const HeroSection = () => {
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handleGetStarted = () => {
+    scrollToSection("menu-suggestions");
+    toast.success("Let's find your perfect meal!", {
+      description: "Check out our AI-powered recommendations below.",
+    });
+  };
+
+  const handleLearnMore = () => {
+    scrollToSection("nutrition");
+    toast.info("Track your nutrition journey", {
+      description: "View your daily insights and progress.",
+    });
+  };
+
   return (
-    <section className="relative overflow-hidden gradient-hero py-16 lg:py-24">
+    <section id="hero" className="relative overflow-hidden gradient-hero py-16 lg:py-24">
       {/* Background decorations */}
       <div className="absolute top-20 left-10 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
@@ -26,10 +48,10 @@ const HeroSection = () => {
             </p>
             
             <div className="flex flex-wrap gap-4">
-              <Button variant="hero" size="xl">
+              <Button variant="hero" size="xl" onClick={handleGetStarted}>
                 Get Started
               </Button>
-              <Button variant="outline" size="xl">
+              <Button variant="outline" size="xl" onClick={handleLearnMore}>
                 Learn More
               </Button>
             </div>

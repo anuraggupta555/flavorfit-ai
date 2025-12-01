@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Flame, Beef, Wheat, Droplets } from "lucide-react";
+import { toast } from "sonner";
 
 interface MacroCardProps {
   label: string;
@@ -9,13 +11,17 @@ interface MacroCardProps {
   unit: string;
   color: string;
   icon: React.ReactNode;
+  onClick: () => void;
 }
 
-const MacroCard = ({ label, current, target, unit, color, icon }: MacroCardProps) => {
+const MacroCard = ({ label, current, target, unit, color, icon, onClick }: MacroCardProps) => {
   const percentage = Math.min((current / target) * 100, 100);
   
   return (
-    <div className="flex items-center gap-4 p-4 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors">
+    <button 
+      onClick={onClick}
+      className="flex items-center gap-4 p-4 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors w-full text-left"
+    >
       <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${color}`}>
         {icon}
       </div>
@@ -28,11 +34,13 @@ const MacroCard = ({ label, current, target, unit, color, icon }: MacroCardProps
         </div>
         <Progress value={percentage} className="h-2" />
       </div>
-    </div>
+    </button>
   );
 };
 
 const NutritionInsights = () => {
+  const [selectedMeal, setSelectedMeal] = useState<string | null>(null);
+
   const macros = [
     { 
       label: "Calories", 
@@ -68,8 +76,31 @@ const NutritionInsights = () => {
     },
   ];
 
+  const meals = [
+    { name: "Breakfast", cal: 450, icon: "🍳", items: ["Oatmeal with berries", "Greek yogurt", "Coffee"] },
+    { name: "Lunch", cal: 650, icon: "🥗", items: ["Grilled chicken salad", "Whole grain bread", "Fresh juice"] },
+    { name: "Dinner", cal: 550, icon: "🍲", items: ["Salmon with vegetables", "Brown rice", "Green tea"] },
+    { name: "Snacks", cal: 200, icon: "🍎", items: ["Apple", "Almonds", "Protein bar"] },
+  ];
+
+  const handleMacroClick = (label: string) => {
+    toast.info(`${label} Details`, {
+      description: `View detailed breakdown of your ${label.toLowerCase()} intake.`,
+    });
+  };
+
+  const handleMealClick = (mealName: string) => {
+    setSelectedMeal(selectedMeal === mealName ? null : mealName);
+    const meal = meals.find(m => m.name === mealName);
+    if (meal && selectedMeal !== mealName) {
+      toast.info(mealName, {
+        description: meal.items.join(", "),
+      });
+    }
+  };
+
   return (
-    <section className="py-12">
+    <section id="nutrition" className="py-12">
       <div className="container">
         <Card variant="elevated" className="overflow-hidden">
           <CardHeader className="pb-4">
@@ -86,7 +117,7 @@ const NutritionInsights = () => {
                   className="animate-fade-up" 
                   style={{ animationDelay: `${index * 0.1}s` }}
                 >
-                  <MacroCard {...macro} />
+                  <MacroCard {...macro} onClick={() => handleMacroClick(macro.label)} />
                 </div>
               ))}
             </div>
@@ -94,22 +125,22 @@ const NutritionInsights = () => {
             {/* Meal breakdown */}
             <div className="mt-8 pt-6 border-t border-border">
               <h4 className="font-semibold text-foreground mb-4">Meal Breakdown</h4>
-              <div className="grid grid-cols-4 gap-4">
-                {[
-                  { name: "Breakfast", cal: 450, icon: "🍳" },
-                  { name: "Lunch", cal: 650, icon: "🥗" },
-                  { name: "Dinner", cal: 550, icon: "🍲" },
-                  { name: "Snacks", cal: 200, icon: "🍎" },
-                ].map((meal, index) => (
-                  <div 
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {meals.map((meal, index) => (
+                  <button 
                     key={meal.name} 
-                    className="text-center p-4 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors cursor-pointer animate-scale-in"
+                    onClick={() => handleMealClick(meal.name)}
+                    className={`text-center p-4 rounded-xl transition-all cursor-pointer animate-scale-in ${
+                      selectedMeal === meal.name 
+                        ? "bg-primary/10 ring-2 ring-primary" 
+                        : "bg-secondary/50 hover:bg-secondary"
+                    }`}
                     style={{ animationDelay: `${0.4 + index * 0.1}s` }}
                   >
                     <span className="text-2xl mb-2 block">{meal.icon}</span>
                     <p className="text-sm font-medium text-foreground">{meal.name}</p>
                     <p className="text-xs text-muted-foreground">{meal.cal} kcal</p>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
