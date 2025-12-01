@@ -1,0 +1,7 @@
+project_id = "iegffibkspmeslscnxwd"
+
+[functions.generate-meals]
+verify_jwt = false
+
+[functions.generate-shopping-list]
+verify_jwt = false

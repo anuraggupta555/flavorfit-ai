@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Package, AlertTriangle, Plus, ShoppingCart, Trash2, Check } from "lucide-react";
+import { Package, AlertTriangle, Plus, ShoppingCart, Trash2, Check, Loader2, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -14,35 +14,30 @@ import {
 } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { usePantryStore, PantryItem } from "@/stores/pantryStore";
+import { useGenerateShoppingList } from "@/hooks/useAI";
 
-interface PantryItemType {
-  name: string;
-  quantity: string;
-  expiresIn: string;
-  isLow: boolean;
-  icon: string;
-}
-
-interface PantryItemProps extends PantryItemType {
+interface PantryItemCardProps {
+  item: PantryItem;
   onDelete: () => void;
 }
 
-const PantryItem = ({ name, quantity, expiresIn, isLow, icon, onDelete }: PantryItemProps) => {
+const PantryItemCard = ({ item, onDelete }: PantryItemCardProps) => {
   return (
     <div className="flex items-center gap-3 p-3 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors group">
       <div className="h-10 w-10 rounded-lg bg-card flex items-center justify-center text-xl shadow-soft">
-        {icon}
+        {item.icon}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="font-medium text-foreground truncate">{name}</p>
-          {isLow && (
+          <p className="font-medium text-foreground truncate">{item.name}</p>
+          {item.isLow && (
             <Badge variant="destructive" className="text-xs px-1.5 py-0">
               Low
             </Badge>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">{quantity} · Expires {expiresIn}</p>
+        <p className="text-xs text-muted-foreground">{item.quantity} · Expires {item.expiresIn}</p>
       </div>
       <Button 
         variant="ghost" 
@@ -57,22 +52,17 @@ const PantryItem = ({ name, quantity, expiresIn, isLow, icon, onDelete }: Pantry
 };
 
 const PantryOverview = () => {
-  const [pantryItems, setPantryItems] = useState<PantryItemType[]>([
-    { name: "Chicken Breast", quantity: "500g", expiresIn: "3 days", isLow: false, icon: "🍗" },
-    { name: "Brown Rice", quantity: "200g", expiresIn: "2 months", isLow: true, icon: "🍚" },
-    { name: "Eggs", quantity: "6 pcs", expiresIn: "1 week", isLow: false, icon: "🥚" },
-    { name: "Spinach", quantity: "100g", expiresIn: "2 days", isLow: true, icon: "🥬" },
-    { name: "Greek Yogurt", quantity: "500ml", expiresIn: "5 days", isLow: false, icon: "🥛" },
-    { name: "Olive Oil", quantity: "250ml", expiresIn: "6 months", isLow: false, icon: "🫒" },
-  ]);
-
-  const [shoppingList, setShoppingList] = useState([
-    { name: "Avocados (3)", checked: false },
-    { name: "Salmon fillet", checked: false },
-    { name: "Cherry tomatoes", checked: false },
-    { name: "Fresh basil", checked: false },
-    { name: "Lemon", checked: false },
-  ]);
+  const { 
+    pantryItems, 
+    shoppingList, 
+    addPantryItem, 
+    removePantryItem, 
+    toggleShoppingItem,
+    addShoppingItem,
+    clearCheckedItems 
+  } = usePantryStore();
+  
+  const { generateShoppingList, isLoading: isGeneratingList } = useGenerateShoppingList();
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", quantity: "", expiresIn: "", icon: "🥫" });
@@ -82,10 +72,10 @@ const PantryOverview = () => {
     return !isNaN(days) && days <= 3;
   });
 
-  const handleDeleteItem = (itemName: string) => {
-    setPantryItems(prev => prev.filter(item => item.name !== itemName));
+  const handleDeleteItem = (item: PantryItem) => {
+    removePantryItem(item.id);
     toast.success("Item removed", {
-      description: `${itemName} has been removed from your pantry.`,
+      description: `${item.name} has been removed from your pantry.`,
     });
   };
 
@@ -95,13 +85,13 @@ const PantryOverview = () => {
       return;
     }
 
-    setPantryItems(prev => [...prev, {
+    addPantryItem({
       name: newItem.name,
       quantity: newItem.quantity,
       expiresIn: newItem.expiresIn || "1 week",
       isLow: false,
       icon: newItem.icon,
-    }]);
+    });
 
     toast.success("Item added!", {
       description: `${newItem.name} has been added to your pantry.`,
@@ -116,29 +106,49 @@ const PantryOverview = () => {
       description: "Looking for recipes using your expiring items.",
     });
     
-    // Scroll to menu suggestions
     const element = document.getElementById("menu-suggestions");
     if (element) {
       element.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
-  const handleToggleShoppingItem = (index: number) => {
-    setShoppingList(prev => prev.map((item, i) => 
-      i === index ? { ...item, checked: !item.checked } : item
-    ));
+  const handleGenerateList = async () => {
+    try {
+      await generateShoppingList(7);
+    } catch {
+      // Error handled in hook
+    }
   };
 
-  const handleGenerateList = () => {
-    const lowItems = pantryItems.filter(item => item.isLow).map(item => ({ name: item.name, checked: false }));
-    if (lowItems.length > 0) {
-      setShoppingList(prev => [...prev, ...lowItems.filter(li => !prev.some(p => p.name === li.name))]);
+  const handleAddLowStockToList = () => {
+    const lowItems = pantryItems.filter(item => item.isLow);
+    let addedCount = 0;
+    
+    lowItems.forEach(item => {
+      const exists = shoppingList.some(si => si.name.toLowerCase() === item.name.toLowerCase());
+      if (!exists) {
+        addShoppingItem({ name: item.name, checked: false });
+        addedCount++;
+      }
+    });
+
+    if (addedCount > 0) {
       toast.success("Shopping list updated!", {
-        description: `Added ${lowItems.length} low-stock items to your list.`,
+        description: `Added ${addedCount} low-stock items to your list.`,
       });
     } else {
       toast.info("All stocked up!", {
-        description: "You don't have any low-stock items.",
+        description: "All low-stock items are already in your list.",
+      });
+    }
+  };
+
+  const handleClearChecked = () => {
+    const checkedCount = shoppingList.filter(i => i.checked).length;
+    if (checkedCount > 0) {
+      clearCheckedItems();
+      toast.success("Items cleared", {
+        description: `Removed ${checkedCount} checked items.`,
       });
     }
   };
@@ -170,11 +180,11 @@ const PantryOverview = () => {
               <div className="grid sm:grid-cols-2 gap-3">
                 {pantryItems.map((item, index) => (
                   <div 
-                    key={item.name} 
+                    key={item.id} 
                     className="animate-fade-up" 
                     style={{ animationDelay: `${index * 0.05}s` }}
                   >
-                    <PantryItem {...item} onDelete={() => handleDeleteItem(item.name)} />
+                    <PantryItemCard item={item} onDelete={() => handleDeleteItem(item)} />
                   </div>
                 ))}
               </div>
@@ -198,7 +208,7 @@ const PantryOverview = () => {
                   </div>
                   <div className="space-y-2">
                     {expiringSoon.map((item) => (
-                      <div key={item.name} className="flex items-center justify-between text-sm">
+                      <div key={item.id} className="flex items-center justify-between text-sm">
                         <span className="flex items-center gap-2">
                           <span>{item.icon}</span>
                           <span className="text-foreground">{item.name}</span>
@@ -226,16 +236,21 @@ const PantryOverview = () => {
                   <div className="h-10 w-10 rounded-xl bg-accent/20 flex items-center justify-center">
                     <ShoppingCart className="h-5 w-5 text-accent" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <p className="font-semibold text-foreground">Shopping List</p>
                     <p className="text-sm text-muted-foreground">{shoppingList.filter(i => !i.checked).length} items to buy</p>
                   </div>
+                  {shoppingList.some(i => i.checked) && (
+                    <Button variant="ghost" size="sm" onClick={handleClearChecked}>
+                      Clear done
+                    </Button>
+                  )}
                 </div>
-                <div className="space-y-2 text-sm">
-                  {shoppingList.map((item, index) => (
+                <div className="space-y-2 text-sm max-h-64 overflow-y-auto">
+                  {shoppingList.map((item) => (
                     <button
-                      key={item.name}
-                      onClick={() => handleToggleShoppingItem(index)}
+                      key={item.id}
+                      onClick={() => toggleShoppingItem(item.id)}
                       className={`flex items-center gap-2 w-full text-left transition-colors ${
                         item.checked ? "text-muted-foreground line-through" : "text-foreground"
                       }`}
@@ -248,12 +263,35 @@ const PantryOverview = () => {
                         {item.checked && <Check className="h-3 w-3 text-primary-foreground" />}
                       </div>
                       {item.name}
+                      {item.quantity && <span className="text-muted-foreground">({item.quantity})</span>}
                     </button>
                   ))}
                 </div>
-                <Button variant="accent" size="sm" className="w-full mt-4" onClick={handleGenerateList}>
-                  Generate List
-                </Button>
+                <div className="flex gap-2 mt-4">
+                  <Button 
+                    variant="soft" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={handleAddLowStockToList}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Low Stock
+                  </Button>
+                  <Button 
+                    variant="accent" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={handleGenerateList}
+                    disabled={isGeneratingList}
+                  >
+                    {isGeneratingList ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 mr-1" />
+                    )}
+                    AI Generate
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
