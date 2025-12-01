@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles, Clock, Users, ChefHat, Heart, ArrowRight } from "lucide-react";
+import { Sparkles, Clock, Users, ChefHat, Heart, ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -11,16 +11,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { useMealPlanStore, Meal } from "@/stores/mealPlanStore";
+import { useGenerateMeals } from "@/hooks/useAI";
 
 interface MealCardProps {
-  title: string;
-  description: string;
-  image: string;
-  calories: number;
-  time: string;
-  servings: number;
-  tags: string[];
-  matchScore: number;
+  meal: Meal;
   index: number;
   isFavorite: boolean;
   onToggleFavorite: () => void;
@@ -28,14 +30,7 @@ interface MealCardProps {
 }
 
 const MealCard = ({ 
-  title, 
-  description, 
-  image, 
-  calories, 
-  time, 
-  servings, 
-  tags, 
-  matchScore, 
+  meal,
   index,
   isFavorite,
   onToggleFavorite,
@@ -49,19 +44,17 @@ const MealCard = ({
     >
       <div className="relative h-48 overflow-hidden">
         <img 
-          src={image} 
-          alt={title}
+          src={meal.image} 
+          alt={meal.title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 via-transparent to-transparent" />
         
-        {/* Match score badge */}
         <div className="absolute top-3 right-3 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-semibold flex items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5" />
-          {matchScore}% Match
+          {meal.matchScore}% Match
         </div>
 
-        {/* Favorite button */}
         <button 
           onClick={(e) => {
             e.stopPropagation();
@@ -76,15 +69,14 @@ const MealCard = ({
           <Heart className={`h-4 w-4 ${isFavorite ? "fill-current" : ""}`} />
         </button>
 
-        {/* Quick info overlay */}
         <div className="absolute bottom-3 left-3 right-3 flex items-center gap-3 text-primary-foreground text-xs">
           <span className="flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" />
-            {time}
+            {meal.time}
           </span>
           <span className="flex items-center gap-1">
             <Users className="h-3.5 w-3.5" />
-            {servings} servings
+            {meal.servings} servings
           </span>
         </div>
       </div>
@@ -92,19 +84,19 @@ const MealCard = ({
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="font-semibold text-lg text-foreground group-hover:text-primary transition-colors line-clamp-1">
-            {title}
+            {meal.title}
           </h3>
           <span className="text-sm font-medium text-accent whitespace-nowrap">
-            {calories} kcal
+            {meal.calories} kcal
           </span>
         </div>
         
         <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-          {description}
+          {meal.description}
         </p>
         
         <div className="flex flex-wrap gap-2 mb-4">
-          {tags.map((tag) => (
+          {meal.tags.map((tag) => (
             <Badge key={tag} variant="secondary" className="text-xs">
               {tag}
             </Badge>
@@ -120,119 +112,124 @@ const MealCard = ({
   );
 };
 
+const defaultMeals: Meal[] = [
+  {
+    id: "1",
+    title: "Mediterranean Quinoa Bowl",
+    description: "Fresh vegetables, feta cheese, olives, and lemon herb dressing over fluffy quinoa.",
+    image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=600&q=80",
+    calories: 485,
+    protein: 32,
+    carbs: 45,
+    fats: 18,
+    time: "25 min",
+    servings: 2,
+    tags: ["High Protein", "Vegetarian"],
+    matchScore: 98,
+    ingredients: ["Quinoa", "Cherry tomatoes", "Cucumber", "Feta cheese", "Kalamata olives", "Red onion", "Lemon", "Olive oil", "Fresh herbs"],
+    instructions: ["Cook quinoa according to package directions and let cool", "Dice tomatoes, cucumber, and red onion", "Whisk together lemon juice, olive oil, and herbs for dressing", "Combine quinoa with vegetables", "Top with crumbled feta and olives", "Drizzle with dressing and serve"]
+  },
+  {
+    id: "2",
+    title: "Grilled Salmon with Asparagus",
+    description: "Omega-3 rich salmon with roasted asparagus and garlic mashed cauliflower.",
+    image: "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&q=80",
+    calories: 520,
+    protein: 42,
+    carbs: 15,
+    fats: 28,
+    time: "30 min",
+    servings: 2,
+    tags: ["High Protein", "Keto"],
+    matchScore: 94,
+    ingredients: ["Salmon fillets", "Asparagus", "Cauliflower", "Garlic", "Butter", "Lemon", "Olive oil", "Salt", "Pepper"],
+    instructions: ["Preheat grill to medium-high heat", "Season salmon with salt, pepper, and lemon", "Steam cauliflower until tender, then mash with garlic and butter", "Toss asparagus with olive oil and seasonings", "Grill salmon for 4-5 minutes per side", "Grill asparagus until tender-crisp", "Serve salmon over cauliflower mash with asparagus"]
+  },
+  {
+    id: "3",
+    title: "Asian Chicken Stir-Fry",
+    description: "Colorful bell peppers, snap peas, and tender chicken in a savory ginger sauce.",
+    image: "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=600&q=80",
+    calories: 410,
+    protein: 38,
+    carbs: 22,
+    fats: 16,
+    time: "20 min",
+    servings: 3,
+    tags: ["Quick", "Low Carb"],
+    matchScore: 91,
+    ingredients: ["Chicken breast", "Bell peppers", "Snap peas", "Ginger", "Garlic", "Soy sauce", "Sesame oil", "Green onions"],
+    instructions: ["Slice chicken breast into thin strips", "Prep vegetables - slice peppers, trim snap peas", "Heat oil in wok over high heat", "Stir-fry chicken until golden, set aside", "Stir-fry vegetables with ginger and garlic", "Return chicken to wok, add sauce", "Garnish with green onions and sesame seeds"]
+  },
+  {
+    id: "4",
+    title: "Avocado Toast Stack",
+    description: "Multi-grain toast with smashed avocado, poached eggs, and microgreens.",
+    image: "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=600&q=80",
+    calories: 380,
+    protein: 18,
+    carbs: 35,
+    fats: 22,
+    time: "15 min",
+    servings: 1,
+    tags: ["Breakfast", "Vegetarian"],
+    matchScore: 87,
+    ingredients: ["Multi-grain bread", "Avocado", "Eggs", "Microgreens", "Cherry tomatoes", "Lemon juice", "Red pepper flakes", "Salt"],
+    instructions: ["Toast bread until golden and crispy", "Mash avocado with lemon juice and salt", "Poach eggs in simmering water for 3-4 minutes", "Spread avocado on toast", "Top with poached egg", "Garnish with microgreens, tomatoes, and red pepper flakes"]
+  },
+];
+
 const MenuSuggestions = () => {
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [selectedMeal, setSelectedMeal] = useState<typeof meals[0] | null>(null);
+  const { recommendations, favorites, toggleFavorite, selectMeal, isLoading } = useMealPlanStore();
+  const { generateMeals, isLoading: isGenerating } = useGenerateMeals();
+  const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [mealTypeDialog, setMealTypeDialog] = useState(false);
+  const [selectedMealType, setSelectedMealType] = useState<"breakfast" | "lunch" | "dinner" | "snacks">("lunch");
 
-  const meals = [
-    {
-      title: "Mediterranean Quinoa Bowl",
-      description: "Fresh vegetables, feta cheese, olives, and lemon herb dressing over fluffy quinoa.",
-      image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=600&q=80",
-      calories: 485,
-      time: "25 min",
-      servings: 2,
-      tags: ["High Protein", "Vegetarian"],
-      matchScore: 98,
-      ingredients: ["Quinoa", "Cherry tomatoes", "Cucumber", "Feta cheese", "Kalamata olives", "Red onion", "Lemon", "Olive oil", "Fresh herbs"],
-      instructions: [
-        "Cook quinoa according to package directions and let cool",
-        "Dice tomatoes, cucumber, and red onion",
-        "Whisk together lemon juice, olive oil, and herbs for dressing",
-        "Combine quinoa with vegetables",
-        "Top with crumbled feta and olives",
-        "Drizzle with dressing and serve"
-      ]
-    },
-    {
-      title: "Grilled Salmon with Asparagus",
-      description: "Omega-3 rich salmon with roasted asparagus and garlic mashed cauliflower.",
-      image: "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&q=80",
-      calories: 520,
-      time: "30 min",
-      servings: 2,
-      tags: ["High Protein", "Keto"],
-      matchScore: 94,
-      ingredients: ["Salmon fillets", "Asparagus", "Cauliflower", "Garlic", "Butter", "Lemon", "Olive oil", "Salt", "Pepper"],
-      instructions: [
-        "Preheat grill to medium-high heat",
-        "Season salmon with salt, pepper, and lemon",
-        "Steam cauliflower until tender, then mash with garlic and butter",
-        "Toss asparagus with olive oil and seasonings",
-        "Grill salmon for 4-5 minutes per side",
-        "Grill asparagus until tender-crisp",
-        "Serve salmon over cauliflower mash with asparagus"
-      ]
-    },
-    {
-      title: "Asian Chicken Stir-Fry",
-      description: "Colorful bell peppers, snap peas, and tender chicken in a savory ginger sauce.",
-      image: "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=600&q=80",
-      calories: 410,
-      time: "20 min",
-      servings: 3,
-      tags: ["Quick", "Low Carb"],
-      matchScore: 91,
-      ingredients: ["Chicken breast", "Bell peppers", "Snap peas", "Ginger", "Garlic", "Soy sauce", "Sesame oil", "Green onions"],
-      instructions: [
-        "Slice chicken breast into thin strips",
-        "Prep vegetables - slice peppers, trim snap peas",
-        "Heat oil in wok over high heat",
-        "Stir-fry chicken until golden, set aside",
-        "Stir-fry vegetables with ginger and garlic",
-        "Return chicken to wok, add sauce",
-        "Garnish with green onions and sesame seeds"
-      ]
-    },
-    {
-      title: "Avocado Toast Stack",
-      description: "Multi-grain toast with smashed avocado, poached eggs, and microgreens.",
-      image: "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=600&q=80",
-      calories: 380,
-      time: "15 min",
-      servings: 1,
-      tags: ["Breakfast", "Vegetarian"],
-      matchScore: 87,
-      ingredients: ["Multi-grain bread", "Avocado", "Eggs", "Microgreens", "Cherry tomatoes", "Lemon juice", "Red pepper flakes", "Salt"],
-      instructions: [
-        "Toast bread until golden and crispy",
-        "Mash avocado with lemon juice and salt",
-        "Poach eggs in simmering water for 3-4 minutes",
-        "Spread avocado on toast",
-        "Top with poached egg",
-        "Garnish with microgreens, tomatoes, and red pepper flakes"
-      ]
-    },
-  ];
+  const mealsToShow = recommendations.length > 0 ? recommendations : defaultMeals;
 
-  const toggleFavorite = (title: string) => {
-    setFavorites(prev => {
-      const newFavorites = new Set(prev);
-      if (newFavorites.has(title)) {
-        newFavorites.delete(title);
-        toast.info("Removed from favorites", {
-          description: `${title} has been removed from your favorites.`,
-        });
-      } else {
-        newFavorites.add(title);
-        toast.success("Added to favorites!", {
-          description: `${title} has been saved to your favorites.`,
-        });
-      }
-      return newFavorites;
-    });
+  const handleToggleFavorite = (meal: Meal) => {
+    toggleFavorite(meal.id);
+    if (favorites.has(meal.id)) {
+      toast.info("Removed from favorites", {
+        description: `${meal.title} has been removed from your favorites.`,
+      });
+    } else {
+      toast.success("Added to favorites!", {
+        description: `${meal.title} has been saved to your favorites.`,
+      });
+    }
   };
 
-  const handleViewRecipe = (meal: typeof meals[0]) => {
+  const handleViewRecipe = (meal: Meal) => {
     setSelectedMeal(meal);
     setDialogOpen(true);
   };
 
-  const handleViewAll = () => {
-    toast.info("All Suggestions", {
-      description: "Full recipe catalog coming soon! Stay tuned.",
-    });
+  const handleAddToMealPlan = () => {
+    if (selectedMeal) {
+      setMealTypeDialog(true);
+    }
+  };
+
+  const confirmAddToMealPlan = () => {
+    if (selectedMeal) {
+      selectMeal(selectedMealType, selectedMeal);
+      toast.success("Added to meal plan!", {
+        description: `${selectedMeal.title} has been added as your ${selectedMealType}.`,
+      });
+      setMealTypeDialog(false);
+      setDialogOpen(false);
+    }
+  };
+
+  const handleGenerateMeals = async () => {
+    try {
+      await generateMeals();
+    } catch {
+      // Error handled in hook
+    }
   };
 
   return (
@@ -247,20 +244,33 @@ const MenuSuggestions = () => {
             <h2 className="text-3xl font-bold text-foreground">Personalized for You</h2>
             <p className="text-muted-foreground mt-1">Based on your pantry and nutritional goals</p>
           </div>
-          <Button variant="outline" onClick={handleViewAll}>
-            View All
-            <ArrowRight className="h-4 w-4 ml-1" />
+          <Button 
+            variant="hero" 
+            onClick={handleGenerateMeals}
+            disabled={isGenerating || isLoading}
+          >
+            {isGenerating || isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Generate Meals
+              </>
+            )}
           </Button>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {meals.map((meal, index) => (
+          {mealsToShow.map((meal, index) => (
             <MealCard 
-              key={meal.title} 
-              {...meal} 
+              key={meal.id} 
+              meal={meal}
               index={index}
-              isFavorite={favorites.has(meal.title)}
-              onToggleFavorite={() => toggleFavorite(meal.title)}
+              isFavorite={favorites.has(meal.id)}
+              onToggleFavorite={() => handleToggleFavorite(meal)}
               onViewRecipe={() => handleViewRecipe(meal)}
             />
           ))}
@@ -285,7 +295,7 @@ const MenuSuggestions = () => {
                 />
               </div>
 
-              <div className="flex gap-4 mb-6">
+              <div className="flex gap-4 mb-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
                   {selectedMeal.time}
@@ -294,8 +304,25 @@ const MenuSuggestions = () => {
                   <Users className="h-4 w-4" />
                   {selectedMeal.servings} servings
                 </div>
-                <div className="text-sm font-medium text-accent">
-                  {selectedMeal.calories} kcal
+              </div>
+
+              {/* Nutrition breakdown */}
+              <div className="grid grid-cols-4 gap-3 p-4 rounded-xl bg-secondary/50 mb-6">
+                <div className="text-center">
+                  <p className="text-lg font-bold text-accent">{selectedMeal.calories}</p>
+                  <p className="text-xs text-muted-foreground">Calories</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-nutrition-protein">{selectedMeal.protein}g</p>
+                  <p className="text-xs text-muted-foreground">Protein</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-nutrition-carbs">{selectedMeal.carbs}g</p>
+                  <p className="text-xs text-muted-foreground">Carbs</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-nutrition-fats">{selectedMeal.fats}g</p>
+                  <p className="text-xs text-muted-foreground">Fats</p>
                 </div>
               </div>
 
@@ -305,8 +332,13 @@ const MenuSuggestions = () => {
                   <ul className="grid grid-cols-2 gap-2">
                     {selectedMeal.ingredients.map((ingredient, idx) => (
                       <li key={idx} className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                        {ingredient}
+                        <div className={`h-1.5 w-1.5 rounded-full ${
+                          selectedMeal.inPantry?.includes(ingredient) ? 'bg-primary' : 'bg-muted-foreground'
+                        }`} />
+                        <span className={selectedMeal.inPantry?.includes(ingredient) ? 'text-primary font-medium' : ''}>
+                          {ingredient}
+                          {selectedMeal.inPantry?.includes(ingredient) && ' ✓'}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -331,26 +363,54 @@ const MenuSuggestions = () => {
                 <Button 
                   variant="hero" 
                   className="flex-1"
-                  onClick={() => {
-                    toast.success("Added to meal plan!", {
-                      description: `${selectedMeal.title} has been added to today's meals.`,
-                    });
-                    setDialogOpen(false);
-                  }}
+                  onClick={handleAddToMealPlan}
                 >
                   Add to Meal Plan
                 </Button>
                 <Button 
                   variant="outline"
-                  onClick={() => {
-                    toggleFavorite(selectedMeal.title);
-                  }}
+                  onClick={() => handleToggleFavorite(selectedMeal)}
                 >
-                  <Heart className={`h-4 w-4 ${favorites.has(selectedMeal.title) ? "fill-current text-destructive" : ""}`} />
+                  <Heart className={`h-4 w-4 ${favorites.has(selectedMeal.id) ? "fill-current text-destructive" : ""}`} />
                 </Button>
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Meal Type Selection Dialog */}
+      <Dialog open={mealTypeDialog} onOpenChange={setMealTypeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add to Meal Plan</DialogTitle>
+            <DialogDescription>
+              Choose which meal slot to add "{selectedMeal?.title}" to.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <Select value={selectedMealType} onValueChange={(v) => setSelectedMealType(v as typeof selectedMealType)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select meal type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="breakfast">🍳 Breakfast</SelectItem>
+                <SelectItem value="lunch">🥗 Lunch</SelectItem>
+                <SelectItem value="dinner">🍲 Dinner</SelectItem>
+                <SelectItem value="snacks">🍎 Snacks</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setMealTypeDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="hero" onClick={confirmAddToMealPlan}>
+              Add to {selectedMealType.charAt(0).toUpperCase() + selectedMealType.slice(1)}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </section>
