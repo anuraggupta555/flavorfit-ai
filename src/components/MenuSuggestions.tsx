@@ -21,7 +21,7 @@ import {
 import { useMealPlanStore, Meal } from "@/stores/mealPlanStore";
 import { usePreferencesStore } from "@/stores/preferencesStore";
 import { usePantryStore } from "@/stores/pantryStore";
-import { useGenerateMeals } from "@/hooks/useAI";
+import { useGenerateMeals, useGenerateShoppingList } from "@/hooks/useAI";
 
 interface MealCardProps {
   meal: Meal;
@@ -186,6 +186,7 @@ const MenuSuggestions = () => {
   const { dietaryPreferences, quickSettings, nutritionGoals } = usePreferencesStore();
   const { pantryItems } = usePantryStore();
   const { generateMeals, isLoading: isGenerating } = useGenerateMeals();
+  const { generateShoppingList, isLoading: isGeneratingList } = useGenerateShoppingList();
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [mealTypeDialog, setMealTypeDialog] = useState(false);
@@ -237,6 +238,8 @@ const MenuSuggestions = () => {
   const handleGenerateMeals = async () => {
     try {
       await generateMeals();
+      // Generate shopping list based on the new meals
+      await generateShoppingList();
     } catch {
       // Error handled in hook
     }
@@ -257,12 +260,12 @@ const MenuSuggestions = () => {
           <Button 
             variant="hero" 
             onClick={handleGenerateMeals}
-            disabled={isGenerating || isLoading}
+            disabled={isGenerating || isLoading || isGeneratingList}
           >
-            {isGenerating || isLoading ? (
+            {isGenerating || isLoading || isGeneratingList ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Generating...
+                {isGeneratingList ? "Updating Shopping List..." : "Generating Meals..."}
               </>
             ) : (
               <>
