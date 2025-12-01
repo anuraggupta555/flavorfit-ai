@@ -15,58 +15,45 @@ import {
 } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { usePreferencesStore } from "@/stores/preferencesStore";
+
+const quickSettingIcons: Record<string, React.ReactNode> = {
+  "quick-meals": <Clock className="h-4 w-4" />,
+  "family-portions": <Users className="h-4 w-4" />,
+  "eco-friendly": <Leaf className="h-4 w-4" />,
+};
 
 const PreferencesSection = () => {
-  const [dietaryPreferences, setDietaryPreferences] = useState([
-    { label: "Vegetarian", active: false },
-    { label: "Gluten-Free", active: true },
-    { label: "Dairy-Free", active: false },
-    { label: "Low-Carb", active: true },
-    { label: "High-Protein", active: true },
-    { label: "Keto", active: false },
-  ]);
-
-  const [quickSettings, setQuickSettings] = useState([
-    { icon: <Clock className="h-4 w-4" />, label: "Quick meals only", sublabel: "Under 30 min", active: false },
-    { icon: <Users className="h-4 w-4" />, label: "Family portions", sublabel: "4+ servings", active: true },
-    { icon: <Leaf className="h-4 w-4" />, label: "Eco-friendly", sublabel: "Low footprint", active: true },
-  ]);
-
-  const [nutritionGoals, setNutritionGoals] = useState([
-    { label: "Daily Calories", value: "2,400 kcal", rawValue: 2400, color: "bg-accent" },
-    { label: "Protein Target", value: "120g", rawValue: 120, color: "bg-nutrition-protein" },
-    { label: "Carb Limit", value: "250g", rawValue: 250, color: "bg-nutrition-carbs" },
-    { label: "Fat Target", value: "80g", rawValue: 80, color: "bg-nutrition-fats" },
-  ]);
+  const {
+    dietaryPreferences,
+    quickSettings,
+    nutritionGoals,
+    toggleDietaryPreference,
+    addDietaryPreference,
+    toggleQuickSetting,
+    updateNutritionGoals,
+  } = usePreferencesStore();
 
   const [goalsDialogOpen, setGoalsDialogOpen] = useState(false);
   const [editedGoals, setEditedGoals] = useState(nutritionGoals);
   const [customRestriction, setCustomRestriction] = useState("");
 
-  const toggleDietaryPreference = (label: string) => {
-    setDietaryPreferences(prev => prev.map(pref => {
-      if (pref.label === label) {
-        const newState = !pref.active;
-        toast.success(newState ? "Preference enabled" : "Preference disabled", {
-          description: `${label} has been ${newState ? "added to" : "removed from"} your diet preferences.`,
-        });
-        return { ...pref, active: newState };
-      }
-      return pref;
-    }));
+  const handleToggleDietaryPreference = (label: string) => {
+    const pref = dietaryPreferences.find(p => p.label === label);
+    const newState = !pref?.active;
+    toggleDietaryPreference(label);
+    toast.success(newState ? "Preference enabled" : "Preference disabled", {
+      description: `${label} has been ${newState ? "added to" : "removed from"} your diet preferences.`,
+    });
   };
 
-  const toggleQuickSetting = (label: string) => {
-    setQuickSettings(prev => prev.map(setting => {
-      if (setting.label === label) {
-        const newState = !setting.active;
-        toast.success(newState ? "Setting enabled" : "Setting disabled", {
-          description: `${label} is now ${newState ? "on" : "off"}.`,
-        });
-        return { ...setting, active: newState };
-      }
-      return setting;
-    }));
+  const handleToggleQuickSetting = (id: string) => {
+    const setting = quickSettings.find(s => s.id === id);
+    const newState = !setting?.active;
+    toggleQuickSetting(id);
+    toast.success(newState ? "Setting enabled" : "Setting disabled", {
+      description: `${setting?.label} is now ${newState ? "on" : "off"}.`,
+    });
   };
 
   const handleAddCustomRestriction = () => {
@@ -80,7 +67,7 @@ const PreferencesSection = () => {
       return;
     }
 
-    setDietaryPreferences(prev => [...prev, { label: customRestriction, active: true }]);
+    addDietaryPreference(customRestriction);
     toast.success("Custom restriction added!", {
       description: `${customRestriction} has been added to your preferences.`,
     });
@@ -88,13 +75,7 @@ const PreferencesSection = () => {
   };
 
   const handleSaveGoals = () => {
-    setNutritionGoals(editedGoals.map(goal => ({
-      ...goal,
-      value: goal.label === "Daily Calories" 
-        ? `${goal.rawValue.toLocaleString()} kcal` 
-        : `${goal.rawValue}g`
-    })));
-    
+    updateNutritionGoals(editedGoals);
     toast.success("Goals updated!", {
       description: "Your nutrition targets have been saved.",
     });
@@ -140,7 +121,7 @@ const PreferencesSection = () => {
                         ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                         : "hover:bg-secondary"
                     }`}
-                    onClick={() => toggleDietaryPreference(pref.label)}
+                    onClick={() => handleToggleDietaryPreference(pref.label)}
                   >
                     {pref.label}
                   </Badge>
@@ -171,10 +152,10 @@ const PreferencesSection = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               {quickSettings.map((setting) => (
-                <div key={setting.label} className="flex items-center justify-between">
+                <div key={setting.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground">
-                      {setting.icon}
+                      {quickSettingIcons[setting.id]}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-foreground">{setting.label}</p>
@@ -183,7 +164,7 @@ const PreferencesSection = () => {
                   </div>
                   <Switch 
                     checked={setting.active} 
-                    onCheckedChange={() => toggleQuickSetting(setting.label)}
+                    onCheckedChange={() => handleToggleQuickSetting(setting.id)}
                   />
                 </div>
               ))}
