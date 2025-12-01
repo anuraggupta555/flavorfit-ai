@@ -11,44 +11,55 @@ serve(async (req) => {
   }
 
   try {
-    const { preferences, pantry, nutritionGoals, daysToplan = 7 } = await req.json();
+    const { preferences, pantry, nutritionGoals, selectedMeals, daysToplan = 7 } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    console.log("Generating shopping list with:", { preferences, daysToplan });
+    console.log("Generating shopping list with:", { preferences, daysToplan, selectedMealsCount: selectedMeals?.length });
 
-    const prompt = `You are a smart meal planning assistant. Generate a comprehensive shopping list for ${daysToplan} days of healthy meals.
+    // Build selected meals context if available
+    const selectedMealsContext = selectedMeals && selectedMeals.length > 0
+      ? `\nSELECTED/RECOMMENDED MEALS (prioritize ingredients for these):
+${selectedMeals.map((meal: any) => `- ${meal.title}: needs ${meal.missingIngredients?.join(', ') || meal.ingredients?.join(', ')}`).join('\n')}`
+      : '';
 
-USER PREFERENCES:
-- Dietary Restrictions: ${JSON.stringify(preferences)}
-- Nutrition Goals: Daily Calories: ${nutritionGoals.calories}kcal, Protein: ${nutritionGoals.protein}g, Carbs: ${nutritionGoals.carbs}g, Fats: ${nutritionGoals.fats}g
+    const prompt = `You are a smart meal planning assistant. Generate a shopping list based on the user's pantry and meal recommendations.
 
-CURRENT PANTRY (already have these):
-${pantry.map((item: any) => `- ${item.name}: ${item.quantity}`).join('\n')}
+USER DIETARY PREFERENCES:
+${preferences.length > 0 ? preferences.map((p: string) => `- ${p}`).join('\n') : '- No specific restrictions'}
 
-Generate a shopping list with items needed to prepare nutritious meals for ${daysToplan} days. 
+NUTRITION GOALS:
+- Daily Calories: ${nutritionGoals.calories || 2000}kcal
+- Protein Target: ${nutritionGoals.protein || 100}g
+- Carb Limit: ${nutritionGoals.carbs || 250}g
+- Fat Target: ${nutritionGoals.fats || 70}g
 
-Rules:
-1. DO NOT include items already in the pantry
-2. Focus on fresh, healthy ingredients
-3. Respect dietary restrictions
-4. Include variety for balanced nutrition
-5. Group by category (Produce, Proteins, Dairy, Grains, etc.)
+CURRENT PANTRY (DO NOT include these items):
+${pantry.length > 0 ? pantry.map((item: any) => `- ${item.name}: ${item.quantity}`).join('\n') : '- Pantry is empty'}
+${selectedMealsContext}
 
-Return ONLY valid JSON with this exact structure:
+CRITICAL RULES:
+1. NEVER include items already in the pantry
+2. If selected meals are provided, PRIORITIZE their missing ingredients
+3. Add complementary items for ${daysToplan} days of balanced meals
+4. Group by category for easy shopping
+5. Specify realistic quantities
+
+Return ONLY valid JSON:
 {
   "shoppingList": [
     {
       "name": "Item name",
       "quantity": "Amount (e.g., 3, 500g, 2 lbs)",
-      "category": "Category (Produce/Proteins/Dairy/Grains/Pantry Staples/Condiments)"
+      "category": "Produce|Proteins|Dairy|Grains|Pantry Staples|Condiments",
+      "forMeal": "Optional: which meal this is for"
     }
   ],
   "estimatedMeals": 21,
-  "tips": ["Helpful tip 1", "Helpful tip 2"]
+  "tips": ["Shopping tip 1", "Storage tip 2"]
 }`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

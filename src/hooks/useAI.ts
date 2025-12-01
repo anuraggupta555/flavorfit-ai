@@ -80,6 +80,7 @@ export function useGenerateShoppingList() {
   
   const { dietaryPreferences, nutritionGoals } = usePreferencesStore();
   const { pantryItems, setShoppingList } = usePantryStore();
+  const { recommendations } = useMealPlanStore();
 
   const generateShoppingList = async (daysToplan = 7) => {
     setIsLoading(true);
@@ -95,6 +96,15 @@ export function useGenerateShoppingList() {
         return acc;
       }, {} as Record<string, number>);
 
+      // Pass recommended meals so AI can suggest their missing ingredients
+      const selectedMeals = recommendations.map((meal) => ({
+        title: meal.title,
+        ingredients: meal.ingredients,
+        missingIngredients: meal.ingredients.filter(
+          (ing) => !meal.inPantry?.some((p) => p.toLowerCase().includes(ing.toLowerCase()))
+        ),
+      }));
+
       const { data, error } = await supabase.functions.invoke('generate-shopping-list', {
         body: {
           preferences: activePreferences,
@@ -103,6 +113,7 @@ export function useGenerateShoppingList() {
             quantity: item.quantity,
           })),
           nutritionGoals: goals,
+          selectedMeals,
           daysToplan,
         },
       });
